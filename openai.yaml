@@ -1,0 +1,74 @@
+---
+name: tracking-fill
+description: Export unplaced order import workbooks from Feishu source sheets for the PatPat tracking/order workflow. Use when Codex is asked to call tracking_fill, inspect a Feishu spreadsheet such as "cut G + new import order requirements (new)" / "切G+新导单要求（新）", check whether an import tab such as "IP Moana 产品导单" has orders not yet arranged/placed, or directly generate an order import table from rows whose order-arranged status is blank.
+---
+
+# Tracking Fill
+
+## Overview
+
+Use this skill to find rows in a Feishu spreadsheet import tab that have not been ordered yet, then export those rows as an Excel order import workbook.
+
+The core workflow is:
+
+1. Find/open the Feishu source spreadsheet.
+2. Export the workbook from Feishu as `.xlsx`, or otherwise obtain an `.xlsx` copy of the source.
+3. Run `scripts/export_unordered_orders.py` to extract the target tab into an order import workbook.
+4. Verify row counts and that platform-order values are text, not formulas.
+
+## Feishu Source Workflow
+
+Prefer direct Feishu API or `lark-cli` when available. If the API command is blocked but the user is signed in to Feishu in Chrome, use Chrome as a fallback to download the source workbook:
+
+1. Search Chrome history or open tabs for `切G+新导单要求（新)` / `cut G + new import order requirements (new)`.
+2. Open the workbook and switch to the requested tab, for example `IP Moana 产品导单`.
+3. Use `菜单 -> 表格 -> 下载为 -> 本地 Excel 表格(.xlsx)`.
+4. Read the downloaded `.xlsx` locally.
+
+Do not edit the Feishu source sheet for export-only requests.
+
+## Default IP Moana Rules
+
+For `IP Moana 产品导单`, use these defaults:
+
+- Target sheet name contains `IP Moana`.
+- Header row is row `1`.
+- `A` / `BD`: must be non-blank for a real order row.
+- `C` / `是否已经安排下单`: blank means not yet ordered.
+- `H` / `*平台单号`: must be non-blank and should be exported as text.
+- Copy row `1` plus all qualifying rows into the output workbook.
+- Exclude example/helper rows where `BD` is blank.
+
+Feishu `.xlsx` exports may have an incorrect worksheet dimension such as `A1`. If `openpyxl` appears to read only one row/column, call `reset_dimensions()` when reading in read-only mode, or load the workbook normally before iterating.
+
+Feishu exports may also leave formula caches blank. In the IP Moana tab, platform order column `H` may be a formula equivalent to `F&G`; when the cached value is missing, compute `H` as text from column `F` plus column `G`.
+
+## Script
+
+Use `scripts/export_unordered_orders.py` for deterministic extraction.
+
+Example:
+
+```bash
+python scripts/export_unordered_orders.py ^
+  --source "C:\Users\Administrator\Downloads\切G+新导单要求（新）.xlsx" ^
+  --output "C:\path\to\outputs\IP_Moana_订单导入表_未下单.xlsx"
+```
+
+Useful options:
+
+- `--sheet-contains "IP Moana"`: choose a sheet by substring.
+- `--bd-col A`: real-row marker column.
+- `--status-col C`: blank means unplaced/unordered.
+- `--platform-col H`: platform order number column.
+- `--formula-left-col F --formula-right-col G`: compute platform order when formula cache is blank.
+- `--no-copy-style`: write values only, without source formatting.
+
+After running, inspect the script summary:
+
+- `candidate_rows` is the number of data rows exported.
+- `unique_orders` is the number of unique platform-order values.
+- `formula_rows_in_platform_col` must be empty in the output.
+- `bad_rows` must be empty.
+
+Save final deliverables under the current task's `outputs` directory.
